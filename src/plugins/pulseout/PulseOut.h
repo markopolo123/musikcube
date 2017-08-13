@@ -74,6 +74,7 @@ class PulseOut : public musik::core::sdk::IOutput {
 
         void OpenDevice(musik::core::sdk::IBuffer *buffer);
         void CloseDevice();
+        std::string GetPreferredDeviceId();
 
         std::recursive_mutex stateMutex;
         pa_blocking* audioConnection;

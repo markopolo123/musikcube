@@ -33,11 +33,16 @@
 //////////////////////////////////////////////////////////////////////////////
 
 #include "AlsaOut.h"
+
 #include <core/sdk/constants.h>
+#include <core/sdk/IPreferences.h>
+
+static musik::core::sdk::IPreferences* prefs;
 
 #define BUFFER_COUNT 16
 #define PCM_ACCESS_TYPE SND_PCM_ACCESS_RW_INTERLEAVED
 #define PCM_FORMAT SND_PCM_FORMAT_FLOAT_LE
+#define PREF_DEVICE_ID "device_id"
 
 #define LOCK(x) \
     /*std::cerr << "locking " << x << "\n";*/ \
@@ -113,6 +118,12 @@ class AlsaDeviceList : public musik::core::sdk::IDeviceList {
         std::vector<AlsaDevice> devices;
 };
 
+extern "C" void SetPreferences(musik::core::sdk::IPreferences* prefs) {
+    ::prefs = prefs;
+    prefs->GetString(PREF_DEVICE_ID, nullptr, 0, "");
+    prefs->Save();
+}
+
 AlsaOut::AlsaOut()
 : pcmHandle(nullptr)
 , device("default")
@@ -177,11 +188,49 @@ IDeviceList* AlsaOut::GetDeviceList() {
     return result;
 }
 
+std::string AlsaOut::GetPreferredDeviceId() {
+    std::string result;
+
+    if (prefs) {
+        char buffer[4096] = { 0 };
+        std::string storedDeviceId;
+
+        if (prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
+            storedDeviceId.assign(buffer);
+        }
+
+        auto deviceList = GetDeviceList();
+        if (deviceList) {
+            for (size_t i = 0; i < deviceList->Count(); i++) {
+                if (deviceList->At(i)->Id() == storedDeviceId) {
+                    result = storedDeviceId;
+                    break;
+                }
+            }
+            deviceList->Destroy();
+        }
+    }
+
+    return result;
+}
+
 void AlsaOut::InitDevice() {
     int err, dir;
     unsigned int rate = (unsigned int) this->rate;
 
-    if ((err = snd_pcm_open(&this->pcmHandle, this->device.c_str(), SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
+    std::string preferredDeviceId = this->GetPreferredDeviceId();
+    bool preferredOk = false;
+
+    if (preferredDeviceId.size() > 0) {
+        if ((err = snd_pcm_open(&this->pcmHandle, preferredDeviceId.c_str(), SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
+            std::cerr << "AlsaOut: cannot opened preferred device id " << preferredDeviceId << ": " << snd_strerror(err) << std::endl;
+        }
+        else {
+            preferredOk = true;
+        }
+    }
+
+    if (!preferredOk && (err = snd_pcm_open(&this->pcmHandle, this->device.c_str(), SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
         std::cerr << "AlsaOut: cannot open audio device 'default' :" << snd_strerror(err) << std::endl;
         goto error;
     }

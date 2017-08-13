@@ -80,6 +80,7 @@ class AlsaOut : public musik::core::sdk::IOutput {
         void InitDevice();
         void CloseDevice();
         void WriteLoop();
+        std::string GetPreferredDeviceId();
 
         std::string device;
         snd_pcm_t* pcmHandle;
