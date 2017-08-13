@@ -83,6 +83,7 @@ class DirectSoundOut : public IOutput {
         bool Configure(IBuffer *buffer);
         void Reset();
         void ResetBuffers();
+        LPCGUID GetPreferredDeviceId();
 
         std::atomic<State> state;
 

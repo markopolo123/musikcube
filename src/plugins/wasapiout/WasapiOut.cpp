@@ -45,6 +45,9 @@
 
 #define MAX_BUFFERS_PER_OUTPUT 16
 
+#define PREF_DEVICE_ID "device_id"
+#define PREF_ENDPOINT_ROUTING "enable_audio_endpoint_routing"
+
 /* NOTE! device init and deinit logic was stolen and modified from
 QMMP's WASAPI output plugin! http://qmmp.ylsoftware.com/ */
 
@@ -108,10 +111,13 @@ class WasapiDeviceList : public musik::core::sdk::IDeviceList {
 
 extern "C" __declspec(dllexport) void SetPreferences(musik::core::sdk::IPreferences* prefs) {
     ::prefs = prefs;
+    prefs->GetString(PREF_DEVICE_ID, nullptr, 0, "");
+    prefs->GetBool(PREF_ENDPOINT_ROUTING, false);
+    prefs->Save();
 }
 
 static bool audioRoutingEnabled() {
-    return ::prefs && prefs->GetBool("enable_audio_endpoint_routing", false);
+    return ::prefs && prefs->GetBool(PREF_ENDPOINT_ROUTING, false);
 }
 
 class NotificationClient : public IMMNotificationClient {
@@ -456,6 +462,57 @@ IDeviceList* WasapiOut::GetDeviceList() {
     return result;
 }
 
+IMMDevice* WasapiOut::GetPreferredDevice() {
+    IMMDevice* result = nullptr;
+
+    char buffer[4096] = { 0 };
+    std::string storedDeviceId;
+
+    if (prefs && prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
+        storedDeviceId.assign(buffer);
+    }
+
+    if (storedDeviceId.size() > 0) {
+        IMMDeviceCollection *deviceCollection = nullptr;
+
+        if (this->enumerator) {
+            HRESULT hr = this->enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &deviceCollection);
+            if (hr == S_OK) {
+                UINT deviceCount = 0;
+                if (deviceCollection->GetCount(&deviceCount) == S_OK) {
+                    for (UINT i = 0; i < deviceCount; i++) {
+                        IMMDevice* device = nullptr;
+                        LPWSTR deviceIdPtr;
+                        std::string deviceId, deviceName;
+
+                        hr = deviceCollection->Item(i, &device);
+                        if (hr == S_OK) {
+                            if (device->GetId(&deviceIdPtr) == S_OK) {
+                                if (storedDeviceId == utf16to8(deviceIdPtr)) {
+                                    result = device;
+                                }
+
+                                CoTaskMemFree(deviceIdPtr);
+
+                                if (result == device) { /* found it! */
+                                    goto found_or_done;
+                                }
+                            }
+
+                            device->Release();
+                        }
+                    }
+                }
+found_or_done:
+                deviceCollection->Release();
+            }
+        }
+
+    }
+
+    return result;
+}
+
 bool WasapiOut::Configure(IBuffer *buffer) {
     HRESULT result;
 
@@ -492,8 +549,24 @@ bool WasapiOut::Configure(IBuffer *buffer) {
 
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
-    if ((result = this->enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &this->device)) != S_OK) {
-        return false;
+    bool preferredDeviceOk = false;
+
+    IMMDevice* preferredDevice = this->GetPreferredDevice();
+    if (preferredDevice) {
+        if ((result = preferredDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**) &this->audioClient)) == S_OK) {
+            preferredDeviceOk = true;
+            this->device = preferredDevice;
+        }
+    }
+
+    if (!preferredDeviceOk) {
+        if (preferredDevice) {
+            preferredDevice->Release();
+        }
+
+        if ((result = this->enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &this->device)) != S_OK) {
+            return false;
+        }
     }
 
     if ((result = this->device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**) &this->audioClient)) != S_OK) {

@@ -36,12 +36,28 @@
 
 #include <core/sdk/constants.h>
 #include <core/sdk/IDevice.h>
+#include <core/sdk/IPreferences.h>
 
 #include <cassert>
 #include <iostream>
 #include <chrono>
 #include <thread>
 #include <vector>
+
+#define MAX_BUFFERS_PER_OUTPUT 16
+#define READ_CURSOR_INITIAL_OFFSET 128
+#define DEVICE_ID "device_id"
+
+#define BUFFER_SIZE_BYTES_PER_CHANNEL \
+    (2048 * sizeof(float) * MAX_BUFFERS_PER_OUTPUT)
+
+musik::core::sdk::IPreferences* prefs = nullptr;
+
+extern "C" __declspec(dllexport) void SetPreferences(musik::core::sdk::IPreferences* prefs) {
+    ::prefs = prefs;
+    prefs->GetString(DEVICE_ID, nullptr, 0, "");
+    prefs->Save();
+}
 
 class DxDevice : public musik::core::sdk::IDevice {
     public:
@@ -119,12 +135,6 @@ class DrainBuffer :
         int channels, samples, rate;
         float *buffer;
 };
-
-#define MAX_BUFFERS_PER_OUTPUT 16
-#define READ_CURSOR_INITIAL_OFFSET 128
-
-#define BUFFER_SIZE_BYTES_PER_CHANNEL \
-    (2048 * sizeof(float) * MAX_BUFFERS_PER_OUTPUT)
 
 using Lock = std::unique_lock<std::recursive_mutex>;
 
@@ -242,6 +252,15 @@ static inline std::string utf16to8(const wchar_t* utf16) {
     return utf8str;
 }
 
+static inline std::wstring utf8to16(const char* utf8) {
+    int size = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, 0, 0);
+    wchar_t* buffer = new wchar_t[size];
+    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, buffer, size);
+    std::wstring utf16fn(buffer);
+    delete[] buffer;
+    return utf16fn;
+}
+
 static BOOL CALLBACK DSEnumCallback(LPGUID lpGuid, LPCWSTR description, LPCWSTR module, LPVOID context) {
     DxDeviceList* list = static_cast<DxDeviceList*>(context);
 
@@ -253,9 +272,10 @@ static BOOL CALLBACK DSEnumCallback(LPGUID lpGuid, LPCWSTR description, LPCWSTR 
         StringFromCLSID(*lpGuid, &guidString);
         utf8Id = utf16to8(guidString);
         CoTaskMemFree(guidString);
+        list->Add(utf8Id, utf8Desc);
     }
 
-    list->Add(utf8Id, utf8Desc);
+
     return 1;
 }
 
@@ -408,6 +428,42 @@ IDeviceList* DirectSoundOut::GetDeviceList() {
     return list;
 }
 
+LPCGUID DirectSoundOut::GetPreferredDeviceId() {
+    GUID* guid = nullptr;
+
+    if (prefs) {
+        char buffer[4096] = { 0 };
+        std::string storedDeviceId;
+
+        if (prefs->GetString(DEVICE_ID, buffer, 4096, "") > 0) {
+            storedDeviceId.assign(buffer);
+        }
+
+        auto devices = GetDeviceList();
+
+        /* if we have a stored device id, see if we can find it in the CURRENT
+        devices! otherwise we'll return null for the primary device */
+        if (storedDeviceId.size()) {
+            auto devices = GetDeviceList();
+            for (size_t i = 0; i < devices->Count(); i++) {
+                if (storedDeviceId == devices->At(i)->Id()) {
+                    std::wstring guidW = utf8to16(storedDeviceId.c_str());
+                    guid = new GUID();
+                    HRESULT result = CLSIDFromString(guidW.c_str(), guid);
+                    if (result != S_OK) {
+                        delete guid;
+                        guid = nullptr;
+                        break;
+                    }
+                }
+            }
+            devices->Destroy();
+        }
+    }
+
+    return guid;
+}
+
 bool DirectSoundOut::Configure(IBuffer *buffer) {
     /* do a quick check up front to see if we're already in a valid state.
     if so, return immediately without changing anything else! */
@@ -425,7 +481,15 @@ bool DirectSoundOut::Configure(IBuffer *buffer) {
     HRESULT result;
 
     if (!this->outputContext) {
-        result = DirectSoundCreate8(nullptr, &this->outputContext, nullptr);
+        /* first, let's try the preferred device */
+        LPCGUID guid = this->GetPreferredDeviceId();
+        result = DirectSoundCreate8(guid, &this->outputContext, nullptr);
+        delete guid;
+
+        /* if it failed, let's output to the default device. */
+        if (result != S_OK) {
+            result = DirectSoundCreate8(nullptr, &this->outputContext, nullptr);
+        }
 
         if (result != DS_OK) {
             return false;

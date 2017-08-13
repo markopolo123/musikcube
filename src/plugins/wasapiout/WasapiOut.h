@@ -82,6 +82,7 @@ class WasapiOut : public IOutput {
 
         bool Configure(IBuffer *buffer);
         void Reset();
+        IMMDevice* GetPreferredDevice();
 
         IMMDeviceEnumerator *enumerator;
         IMMDevice *device;

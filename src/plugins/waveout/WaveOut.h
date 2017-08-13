@@ -79,6 +79,8 @@ class WaveOut : public IOutput {
         void ClearBufferQueue();
         void NotifyBufferProcessed(WaveOutBufferPtr buffer);
 
+        UINT GetPreferredDeviceId();
+
         WaveOutBufferPtr GetEmptyBuffer();
 
         /* note we apparently use a std::list<> here, and not std::set<> because
