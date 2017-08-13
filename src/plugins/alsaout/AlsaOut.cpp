@@ -53,7 +53,6 @@
     err = snd_pcm_writei(handle, context->buffer->BufferPointer(), samples); \
     if (err < 0) { PRINT_ERROR(err); }
 
-
 static inline bool playable(snd_pcm_t* pcm) {
     if (!pcm) {
         return false;
@@ -72,6 +71,47 @@ static inline bool playable(snd_pcm_t* pcm) {
 }
 
 using namespace musik::core::sdk;
+
+class AlsaDevice : public IDevice {
+    public:
+        AlsaDevice(const std::string& id, const std::string& name) {
+            this->id = id;
+            this->name = name;
+        }
+
+        virtual const char* Name() {
+            return name.c_str();
+        }
+
+        virtual const char* Id() {
+            return id.c_str();
+        }
+
+    private:
+        std::string name, id;
+};
+
+class AlsaDeviceList : public musik::core::sdk::IDeviceList {
+    public:
+        virtual void Destroy() {
+            delete this;
+        }
+
+        virtual size_t Count() {
+            return devices.size();
+        }
+
+        virtual IDevice* At(size_t index) {
+            return &devices.at(index);
+        }
+
+        void Add(const std::string& id, const std::string& name) {
+            devices.push_back(AlsaDevice(id, name));
+        }
+
+    private:
+        std::vector<AlsaDevice> devices;
+};
 
 AlsaOut::AlsaOut()
 : pcmHandle(nullptr)
@@ -112,6 +152,29 @@ void AlsaOut::CloseDevice() {
         this->pcmHandle = nullptr;
         this->latency = 0.0;
     }
+}
+
+IDeviceList* AlsaOut::GetDeviceList() {
+    AlsaDeviceList* result = new AlsaDeviceList();
+
+    /* https://stackoverflow.com/a/6870226 */
+    char** hints;
+    if (snd_device_name_hint(-1, "pcm", (void***)&hints) == 0) {
+        char** n = hints;
+        while (*n != nullptr) {
+            char *name = snd_device_name_get_hint(*n, "NAME");
+            if (name) {
+                result->Add(std::string(name), std::string(name));
+                free(name);
+            }
+            ++n;
+        }
+
+        snd_device_name_free_hint((void**) hints);
+    }
+
+    size_t n = result->Count();
+    return result;
 }
 
 void AlsaOut::InitDevice() {

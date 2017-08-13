@@ -39,6 +39,8 @@
 #include <boost/thread/thread.hpp>
 
 #include <core/sdk/IOutput.h>
+#include <core/sdk/IDevice.h>
+
 #include <boost/thread/recursive_mutex.hpp>
 #include <boost/thread/condition.hpp>
 #include <list>
@@ -64,6 +66,8 @@ class AlsaOut : public musik::core::sdk::IOutput {
         virtual int Play(
             musik::core::sdk::IBuffer *buffer,
             musik::core::sdk::IBufferProvider *provider);
+
+        musik::core::sdk::IDeviceList* GetDeviceList();
 
     private:
         struct BufferContext {

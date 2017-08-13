@@ -36,6 +36,8 @@
 #include "pch.h"
 
 #include <core/sdk/IOutput.h>
+#include <core/sdk/IDevice.h>
+
 #include <mutex>
 #include "pulse_blocking_stream.h"
 
@@ -60,6 +62,8 @@ class PulseOut : public musik::core::sdk::IOutput {
         virtual int Play(
             musik::core::sdk::IBuffer *buffer,
             musik::core::sdk::IBufferProvider *provider);
+
+        musik::core::sdk::IDeviceList* GetDeviceList();
 
     private:
         enum State {
