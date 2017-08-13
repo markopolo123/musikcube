@@ -34,12 +34,65 @@
 
 #include "pch.h"
 #include "WaveOut.h"
+#include <string>
+#include <vector>
 #include <core/sdk/constants.h>
 
 #define MAX_VOLUME 0xFFFF
 #define MAX_BUFFERS_PER_OUTPUT 16
 
 using LockT = std::unique_lock<std::recursive_mutex>;
+
+class WaveOutDevice : public musik::core::sdk::IDevice {
+    public:
+        WaveOutDevice(const std::string& id, const std::string& name) {
+            this->id = id;
+            this->name = name;
+        }
+
+        virtual const char* Name() {
+            return name.c_str();
+        }
+
+        virtual const char* Id() {
+            return id.c_str();
+        }
+
+    private:
+        std::string name, id;
+};
+
+class WaveOutDeviceList : public musik::core::sdk::IDeviceList {
+    public:
+        virtual void Destroy() {
+            delete this;
+        }
+
+        virtual size_t Count() {
+            return devices.size();
+        }
+
+        virtual IDevice* At(size_t index) {
+            return &devices.at(index);
+        }
+
+        void Add(const std::string& id, const std::string& name) {
+            devices.push_back(WaveOutDevice(id, name));
+        }
+
+    private:
+        std::vector<WaveOutDevice> devices;
+};
+
+static inline std::string utf16to8(const wchar_t* utf16) {
+    if (!utf16) return "";
+    int size = WideCharToMultiByte(CP_UTF8, 0, utf16, -1, 0, 0, 0, 0);
+    char* buffer = new char[size];
+    WideCharToMultiByte(CP_UTF8, 0, utf16, -1, buffer, size, 0, 0);
+    std::string utf8str(buffer);
+    delete[] buffer;
+    return utf8str;
+}
 
 WaveOut::WaveOut()
 : waveHandle(NULL)
@@ -252,6 +305,21 @@ int WaveOut::Play(IBuffer *buffer, IBufferProvider *provider) {
     }
 
     return OutputBufferFull;
+}
+
+IDeviceList* WaveOut::GetDeviceList() {
+    WaveOutDeviceList* result = new WaveOutDeviceList();
+
+    for (UINT i = 0; i < waveOutGetNumDevs(); i++) {
+        WAVEOUTCAPS caps = { 0 };
+        if (waveOutGetDevCaps(i, &caps, sizeof(WAVEOUTCAPS)) == MMSYSERR_NOERROR) {
+            std::string name = utf16to8(caps.szPname);
+            std::string id = std::to_string(i) + ":" + name;
+            result->Add(id, name);
+        }
+    }
+
+    return result;
 }
 
 void WaveOut::SetFormat(IBuffer *buffer) {

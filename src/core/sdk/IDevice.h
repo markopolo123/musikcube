@@ -31,71 +31,22 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 //////////////////////////////////////////////////////////////////////////////
+
 #pragma once
 
-#include "pch.h"
+namespace musik { namespace core { namespace sdk {
 
-#include <deque>
-#include <memory>
-#include <mutex>
-#include <atomic>
+    class IDevice {
+        public:
+            virtual const char* Name() = 0;
+            virtual const char* Id() = 0;
+    };
 
-#include <Windows.h>
-#include <Mmsystem.h>
-#include <Mmreg.h>
-#include <KS.h>
-#include <Ksmedia.h>
-#include <dsound.h>
+    class IDeviceList {
+        public:
+            virtual void Destroy() = 0;
+            virtual size_t Count() = 0;
+            virtual IDevice* At(size_t index) = 0;
+    };
 
-#include <core/sdk/IOutput.h>
-#include <core/sdk/IDevice.h>
-
-using namespace musik::core::sdk;
-
-class DirectSoundOut : public IOutput {
-    public:
-        DirectSoundOut();
-        ~DirectSoundOut();
-
-        /* IPlugin */
-        virtual const char* Name() { return "DirectSound"; };
-        virtual void Destroy();
-
-        /* IOutput */
-        virtual void Pause();
-        virtual void Resume();
-        virtual void SetVolume(double volume);
-        virtual double GetVolume();
-        virtual void Stop();
-        virtual int Play(IBuffer *buffer, IBufferProvider *provider);
-        virtual double Latency();
-        virtual void Drain();
-
-        IDeviceList* GetDeviceList();
-
-    private:
-        enum State {
-            StateStopped,
-            StatePlaying,
-            StatePaused
-        };
-
-        bool Configure(IBuffer *buffer);
-        void Reset();
-        void ResetBuffers();
-
-        std::atomic<State> state;
-
-        WAVEFORMATEXTENSIBLE waveFormat;
-        IDirectSound8 *outputContext;
-        IDirectSoundBuffer *primaryBuffer;
-        IDirectSoundBuffer8 *secondaryBuffer;
-        DWORD bufferSize;
-        DWORD writeOffset;
-        int rate;
-        int channels;
-        double volume;
-        double latency;
-        bool firstBufferWritten;
-        std::recursive_mutex stateMutex;
-};
+} } }

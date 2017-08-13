@@ -39,6 +39,7 @@
 #include <mutex>
 #include "WaveOutBuffer.h"
 #include <core/sdk/IOutput.h>
+#include <core/sdk/IDevice.h>
 
 using namespace musik::core::sdk;
 
@@ -62,6 +63,8 @@ class WaveOut : public IOutput {
         virtual int Play(IBuffer *buffer, IBufferProvider *provider);
         virtual double Latency() { return 0.0; }
         virtual void Drain() { }
+
+        IDeviceList* GetDeviceList();
 
         void OnBufferWrittenToOutput(WaveOutBuffer *buffer);
 

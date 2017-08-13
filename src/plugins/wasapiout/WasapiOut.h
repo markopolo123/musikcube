@@ -44,6 +44,7 @@
 #include <Audioclient.h>
 
 #include <core/sdk/IOutput.h>
+#include <core/sdk/IDevice.h>
 
 using namespace musik::core::sdk;
 
@@ -67,6 +68,8 @@ class WasapiOut : public IOutput {
         virtual int Play(IBuffer *buffer, IBufferProvider *provider);
         virtual double Latency();
         virtual void Drain();
+
+        IDeviceList* GetDeviceList();
 
         void OnDeviceChanged() { this->deviceChanged = true; }
 

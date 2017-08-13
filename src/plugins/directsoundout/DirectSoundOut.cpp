@@ -35,11 +35,54 @@
 #include "DirectSoundOut.h"
 
 #include <core/sdk/constants.h>
+#include <core/sdk/IDevice.h>
 
 #include <cassert>
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <vector>
+
+class DxDevice : public musik::core::sdk::IDevice {
+    public:
+        DxDevice(const std::string& id, const std::string& name) {
+            this->id = id;
+            this->name = name;
+        }
+
+        virtual const char* Name() {
+            return name.c_str();
+        }
+
+        virtual const char* Id() {
+            return id.c_str();
+        }
+
+    private:
+        std::string name, id;
+};
+
+class DxDeviceList : public musik::core::sdk::IDeviceList {
+    public:
+        virtual void Destroy() {
+            delete this;
+        }
+
+        virtual size_t Count() {
+            return devices.size();
+        }
+
+        virtual IDevice* At(size_t index) {
+            return &devices.at(index);
+        }
+
+        void Add(const std::string& id, const std::string& name) {
+            devices.push_back(DxDevice(id, name));
+        }
+
+    private:
+        std::vector<DxDevice> devices;
+};
 
 class DrainBuffer :
     public musik::core::sdk::IBuffer,
@@ -189,6 +232,33 @@ void DirectSoundOut::Stop() {
     this->state = StateStopped;
 }
 
+static inline std::string utf16to8(const wchar_t* utf16) {
+    if (!utf16) return "";
+    int size = WideCharToMultiByte(CP_UTF8, 0, utf16, -1, 0, 0, 0, 0);
+    char* buffer = new char[size];
+    WideCharToMultiByte(CP_UTF8, 0, utf16, -1, buffer, size, 0, 0);
+    std::string utf8str(buffer);
+    delete[] buffer;
+    return utf8str;
+}
+
+static BOOL CALLBACK DSEnumCallback(LPGUID lpGuid, LPCWSTR description, LPCWSTR module, LPVOID context) {
+    DxDeviceList* list = static_cast<DxDeviceList*>(context);
+
+    std::string utf8Id = "";
+    std::string utf8Desc = utf16to8(description);
+
+    if (lpGuid) {
+        OLECHAR* guidString;
+        StringFromCLSID(*lpGuid, &guidString);
+        utf8Id = utf16to8(guidString);
+        CoTaskMemFree(guidString);
+    }
+
+    list->Add(utf8Id, utf8Desc);
+    return 1;
+}
+
 int DirectSoundOut::Play(IBuffer *buffer, IBufferProvider *provider) {
     Lock lock(this->stateMutex);
 
@@ -330,6 +400,12 @@ void DirectSoundOut::ResetBuffers() {
 
 double DirectSoundOut::Latency() {
     return (double) latency;
+}
+
+IDeviceList* DirectSoundOut::GetDeviceList() {
+    DxDeviceList* list = new DxDeviceList();
+    DirectSoundEnumerate((LPDSENUMCALLBACKW) DSEnumCallback, (LPVOID) list);
+    return list;
 }
 
 bool DirectSoundOut::Configure(IBuffer *buffer) {

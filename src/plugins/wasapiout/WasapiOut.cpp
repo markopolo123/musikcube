@@ -36,10 +36,12 @@
 #include <core/sdk/constants.h>
 #include <core/sdk/IPreferences.h>
 #include <AudioSessionTypes.h>
+#include <Functiondiscoverykeys_devpkey.h>
 #include <iostream>
 #include <chrono>
 #include <thread>
 #include <algorithm>
+#include <vector>
 
 #define MAX_BUFFERS_PER_OUTPUT 16
 
@@ -52,6 +54,57 @@ QMMP's WASAPI output plugin! http://qmmp.ylsoftware.com/ */
 
 using Lock = std::unique_lock<std::recursive_mutex>;
 musik::core::sdk::IPreferences* prefs = nullptr;
+
+static inline std::string utf16to8(const wchar_t* utf16) {
+    if (!utf16) return "";
+    int size = WideCharToMultiByte(CP_UTF8, 0, utf16, -1, 0, 0, 0, 0);
+    char* buffer = new char[size];
+    WideCharToMultiByte(CP_UTF8, 0, utf16, -1, buffer, size, 0, 0);
+    std::string utf8str(buffer);
+    delete[] buffer;
+    return utf8str;
+}
+
+class WasapiDevice : public musik::core::sdk::IDevice {
+    public:
+        WasapiDevice(const std::string& id, const std::string& name) {
+            this->id = id;
+            this->name = name;
+        }
+
+        virtual const char* Name() {
+            return name.c_str();
+        }
+
+        virtual const char* Id() {
+            return id.c_str();
+        }
+
+    private:
+        std::string name, id;
+};
+
+class WasapiDeviceList : public musik::core::sdk::IDeviceList {
+    public:
+        virtual void Destroy() {
+            delete this;
+        }
+
+        virtual size_t Count() {
+            return devices.size();
+        }
+
+        virtual IDevice* At(size_t index) {
+            return &devices.at(index);
+        }
+
+        void Add(const std::string& id, const std::string& name) {
+            devices.push_back(WasapiDevice(id, name));
+        }
+
+    private:
+        std::vector<WasapiDevice> devices;
+};
 
 extern "C" __declspec(dllexport) void SetPreferences(musik::core::sdk::IPreferences* prefs) {
     ::prefs = prefs;
@@ -339,6 +392,68 @@ void WasapiOut::Reset() {
 
 double WasapiOut::Latency() {
     return this->latency;
+}
+
+IDeviceList* WasapiOut::GetDeviceList() {
+    WasapiDeviceList* result = new WasapiDeviceList();
+    IMMDeviceEnumerator *deviceEnumerator = nullptr;
+    IMMDeviceCollection *deviceCollection = nullptr;
+
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
+    HRESULT hr = CoCreateInstance(
+        __uuidof(MMDeviceEnumerator),
+        NULL,
+        CLSCTX_ALL,
+        __uuidof(IMMDeviceEnumerator),
+        (void**) &deviceEnumerator);
+
+    if (hr == S_OK) {
+        hr = deviceEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &deviceCollection);
+        if (hr == S_OK) {
+            UINT deviceCount = 0;
+            if (deviceCollection->GetCount(&deviceCount) == S_OK) {
+                for (UINT i = 0; i < deviceCount; i++) {
+                    IMMDevice* device = nullptr;
+                    LPWSTR deviceIdPtr;
+                    std::string deviceId, deviceName;
+
+                    hr = deviceCollection->Item(i, &device);
+                    if (hr == S_OK) {
+                        if (device->GetId(&deviceIdPtr) == S_OK) {
+                            deviceId = utf16to8(deviceIdPtr);
+                            CoTaskMemFree(deviceIdPtr);
+                        }
+
+                        IPropertyStore *propertyStore;
+                        if (device->OpenPropertyStore(STGM_READ, &propertyStore) == S_OK) {
+                            PROPVARIANT friendlyName;
+                            PropVariantInit(&friendlyName);
+
+                            if (propertyStore->GetValue(PKEY_Device_FriendlyName, &friendlyName) == S_OK) {
+                                deviceName = utf16to8(friendlyName.pwszVal);
+                                PropVariantClear(&friendlyName);
+                            }
+
+                            propertyStore->Release();
+                        }
+
+                        if (deviceId.size() || deviceName.size()) {
+                            result->Add(deviceId, deviceName);
+                        }
+
+                        device->Release();
+                    }
+                }
+            }
+
+            deviceCollection->Release();
+        }
+
+        deviceEnumerator->Release();
+    }
+
+    return result;
 }
 
 bool WasapiOut::Configure(IBuffer *buffer) {
