@@ -45,6 +45,13 @@ using namespace musik::core::sdk;
     #include <unistd.h>
 #endif
 
+class NullDeviceList : public IDeviceList {
+    public:
+        virtual void Destroy() override { delete this; }
+        virtual size_t Count() const override { return 0; }
+        virtual const IDevice* At(size_t index) const override { return nullptr; }
+};
+
 NullOut::NullOut() {
     this->volume = 1.0f;
     this->state = StateStopped;
@@ -79,6 +86,18 @@ void NullOut::Stop() {
 
 void NullOut::Drain() {
 
+}
+
+IDeviceList* NullOut::GetDeviceList() {
+    return new NullDeviceList();
+}
+
+bool NullOut::SetDefaultDevice(const char* deviceId) {
+    return false;
+}
+
+IDevice* NullOut::GetDefaultDevice() {
+    return nullptr;
 }
 
 int NullOut::Play(IBuffer *buffer, IBufferProvider *provider) {

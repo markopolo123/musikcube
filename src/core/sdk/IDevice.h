@@ -34,19 +34,40 @@
 
 #pragma once
 
+#include <string>
+
 namespace musik { namespace core { namespace sdk {
+
+    class IOutput;
 
     class IDevice {
         public:
-            virtual const char* Name() = 0;
-            virtual const char* Id() = 0;
+            virtual void Destroy() = 0;
+            virtual const char* Name() const = 0;
+            virtual const char* Id() const = 0;
     };
 
     class IDeviceList {
         public:
             virtual void Destroy() = 0;
-            virtual size_t Count() = 0;
-            virtual IDevice* At(size_t index) = 0;
+            virtual size_t Count() const = 0;
+            virtual const IDevice* At(size_t index) const = 0;
     };
+
+    template <typename Device>
+    IDevice* findDeviceById(IOutput* output, const std::string& deviceId) {
+        IDevice* result = nullptr;
+        auto deviceList = output->GetDeviceList();
+        if (deviceList) {
+            for (size_t i = 0; i < deviceList->Count(); i++) {
+                auto device = deviceList->At(i);
+                if (device->Id() == deviceId) {
+                    return new Device(device->Id(), device->Name());
+                }
+            }
+            deviceList->Destroy();
+        }
+        return result;
+    }
 
 } } }

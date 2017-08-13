@@ -59,6 +59,15 @@ extern "C" __declspec(dllexport) void SetPreferences(musik::core::sdk::IPreferen
     prefs->Save();
 }
 
+static std::string getDeviceId() {
+    char buffer[2048] = { 0 };
+    std::string storedDeviceId;
+    if (prefs && prefs->GetString(DEVICE_ID, buffer, 4096, "") > 0) {
+        storedDeviceId.assign(buffer);
+    }
+    return storedDeviceId;
+}
+
 class DxDevice : public musik::core::sdk::IDevice {
     public:
         DxDevice(const std::string& id, const std::string& name) {
@@ -66,11 +75,15 @@ class DxDevice : public musik::core::sdk::IDevice {
             this->name = name;
         }
 
-        virtual const char* Name() {
+        virtual void Destroy() override {
+            delete this;
+        }
+
+        virtual const char* Name() const override {
             return name.c_str();
         }
 
-        virtual const char* Id() {
+        virtual const char* Id() const override {
             return id.c_str();
         }
 
@@ -84,11 +97,11 @@ class DxDeviceList : public musik::core::sdk::IDeviceList {
             delete this;
         }
 
-        virtual size_t Count() {
+        virtual size_t Count() const override {
             return devices.size();
         }
 
-        virtual IDevice* At(size_t index) {
+        virtual const IDevice* At(size_t index) const override {
             return &devices.at(index);
         }
 
@@ -331,8 +344,8 @@ int DirectSoundOut::Play(IBuffer *buffer, IBufferProvider *provider) {
             writeOffset,
             bufferBytes,
             (void **)&dst1, &size1,
-            (void **)&dst2, &size2,
-            0);
+(void **)&dst2, &size2,
+0);
     }
 
     if (result == DS_OK) {
@@ -419,26 +432,40 @@ void DirectSoundOut::ResetBuffers() {
 }
 
 double DirectSoundOut::Latency() {
-    return (double) latency;
+    return (double)latency;
 }
 
 IDeviceList* DirectSoundOut::GetDeviceList() {
     DxDeviceList* list = new DxDeviceList();
-    DirectSoundEnumerate((LPDSENUMCALLBACKW) DSEnumCallback, (LPVOID) list);
+    DirectSoundEnumerate((LPDSENUMCALLBACKW)DSEnumCallback, (LPVOID)list);
     return list;
+}
+
+bool DirectSoundOut::SetDefaultDevice(const char* deviceId) {
+    if (!prefs || !deviceId || !strlen(deviceId)) {
+        prefs->SetString(DEVICE_ID, "");
+        return true;
+    }
+
+    auto device = findDeviceById<DxDevice>(this, deviceId);
+    if (device) {
+        device->Destroy();
+        prefs->SetString(DEVICE_ID, deviceId);
+        return true;
+    }
+
+    return false;
+}
+
+IDevice* DirectSoundOut::GetDefaultDevice() {
+    return findDeviceById<DxDevice>(this, getDeviceId());
 }
 
 LPCGUID DirectSoundOut::GetPreferredDeviceId() {
     GUID* guid = nullptr;
 
     if (prefs) {
-        char buffer[4096] = { 0 };
-        std::string storedDeviceId;
-
-        if (prefs->GetString(DEVICE_ID, buffer, 4096, "") > 0) {
-            storedDeviceId.assign(buffer);
-        }
-
+        std::string storedDeviceId = getDeviceId();
         auto devices = GetDeviceList();
 
         /* if we have a stored device id, see if we can find it in the CURRENT

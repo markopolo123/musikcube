@@ -68,6 +68,15 @@ static inline std::string utf16to8(const wchar_t* utf16) {
     return utf8str;
 }
 
+static std::string getDeviceId() {
+    char buffer[4096] = { 0 };
+    std::string storedDeviceId;
+    if (prefs && prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
+        storedDeviceId.assign(buffer);
+    }
+    return storedDeviceId;
+}
+
 class WasapiDevice : public musik::core::sdk::IDevice {
     public:
         WasapiDevice(const std::string& id, const std::string& name) {
@@ -75,11 +84,15 @@ class WasapiDevice : public musik::core::sdk::IDevice {
             this->name = name;
         }
 
-        virtual const char* Name() {
+        virtual void Destroy() override {
+            delete this;
+        }
+
+        virtual const char* Name() const override {
             return name.c_str();
         }
 
-        virtual const char* Id() {
+        virtual const char* Id() const override {
             return id.c_str();
         }
 
@@ -93,11 +106,11 @@ class WasapiDeviceList : public musik::core::sdk::IDeviceList {
             delete this;
         }
 
-        virtual size_t Count() {
+        virtual size_t Count() const override {
             return devices.size();
         }
 
-        virtual IDevice* At(size_t index) {
+        virtual const IDevice* At(size_t index) const override {
             return &devices.at(index);
         }
 
@@ -400,6 +413,26 @@ double WasapiOut::Latency() {
     return this->latency;
 }
 
+bool WasapiOut::SetDefaultDevice(const char* deviceId) {
+    if (!prefs || !deviceId || !strlen(deviceId)) {
+        prefs->SetString(PREF_DEVICE_ID, "");
+        return true;
+    }
+
+    auto device = findDeviceById<WasapiDevice>(this, deviceId);
+    if (device) {
+        device->Destroy();
+        prefs->SetString(PREF_DEVICE_ID, deviceId);
+        return true;
+    }
+
+    return false;
+}
+
+IDevice* WasapiOut::GetDefaultDevice() {
+    return findDeviceById<WasapiDevice>(this, getDeviceId());
+}
+
 IDeviceList* WasapiOut::GetDeviceList() {
     WasapiDeviceList* result = new WasapiDeviceList();
     IMMDeviceEnumerator *deviceEnumerator = nullptr;
@@ -465,13 +498,7 @@ IDeviceList* WasapiOut::GetDeviceList() {
 IMMDevice* WasapiOut::GetPreferredDevice() {
     IMMDevice* result = nullptr;
 
-    char buffer[4096] = { 0 };
-    std::string storedDeviceId;
-
-    if (prefs && prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
-        storedDeviceId.assign(buffer);
-    }
-
+    std::string storedDeviceId = getDeviceId();
     if (storedDeviceId.size() > 0) {
         IMMDeviceCollection *deviceCollection = nullptr;
 

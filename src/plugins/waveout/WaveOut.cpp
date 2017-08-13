@@ -54,11 +54,15 @@ class WaveOutDevice : public musik::core::sdk::IDevice {
             this->name = name;
         }
 
-        virtual const char* Name() {
+        virtual void Destroy() override {
+            delete this;
+        }
+
+        virtual const char* Name() const override {
             return name.c_str();
         }
 
-        virtual const char* Id() {
+        virtual const char* Id() const override {
             return id.c_str();
         }
 
@@ -68,15 +72,15 @@ class WaveOutDevice : public musik::core::sdk::IDevice {
 
 class WaveOutDeviceList : public musik::core::sdk::IDeviceList {
     public:
-        virtual void Destroy() {
+        virtual void Destroy() override {
             delete this;
         }
 
-        virtual size_t Count() {
+        virtual size_t Count() const override {
             return devices.size();
         }
 
-        virtual IDevice* At(size_t index) {
+        virtual const IDevice* At(size_t index) const override {
             return &devices.at(index);
         }
 
@@ -102,6 +106,20 @@ static inline std::string utf16to8(const wchar_t* utf16) {
     std::string utf8str(buffer);
     delete[] buffer;
     return utf8str;
+}
+
+static std::string deviceCapsToId(WAVEOUTCAPS& caps, UINT index) {
+    std::string name = utf16to8(caps.szPname);
+    return std::to_string(index) + ":" + name;
+}
+
+static std::string getDeviceId() {
+    char buffer[4096] = { 0 };
+    std::string storedDeviceId;
+    if (prefs && prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
+        storedDeviceId.assign(buffer);
+    }
+    return storedDeviceId;
 }
 
 WaveOut::WaveOut()
@@ -317,9 +335,24 @@ int WaveOut::Play(IBuffer *buffer, IBufferProvider *provider) {
     return OutputBufferFull;
 }
 
-static std::string deviceCapsToId(WAVEOUTCAPS& caps, UINT index) {
-    std::string name = utf16to8(caps.szPname);
-    return std::to_string(index) + ":" + name;
+bool WaveOut::SetDefaultDevice(const char* deviceId) {
+    if (!prefs || !deviceId || !strlen(deviceId)) {
+        prefs->SetString(PREF_DEVICE_ID, "");
+        return true;
+    }
+
+    auto device = findDeviceById<WaveOutDevice>(this, deviceId);
+    if (device) {
+        device->Destroy();
+        prefs->SetString(PREF_DEVICE_ID, deviceId);
+        return true;
+    }
+
+    return false;
+}
+
+IDevice* WaveOut::GetDefaultDevice() {
+    return findDeviceById<WaveOutDevice>(this, getDeviceId());
 }
 
 IDeviceList* WaveOut::GetDeviceList() {
@@ -338,12 +371,7 @@ IDeviceList* WaveOut::GetDeviceList() {
 }
 
 UINT WaveOut::GetPreferredDeviceId() {
-    char buffer[4096] = { 0 };
-    std::string storedDeviceId;
-
-    if (prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
-        storedDeviceId.assign(buffer);
-    }
+    std::string storedDeviceId = getDeviceId();
 
     for (UINT i = 0; i < waveOutGetNumDevs(); i++) {
         WAVEOUTCAPS caps = { 0 };

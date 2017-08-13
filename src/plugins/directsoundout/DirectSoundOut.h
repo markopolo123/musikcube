@@ -62,16 +62,17 @@ class DirectSoundOut : public IOutput {
         virtual void Destroy();
 
         /* IOutput */
-        virtual void Pause();
-        virtual void Resume();
-        virtual void SetVolume(double volume);
-        virtual double GetVolume();
-        virtual void Stop();
-        virtual int Play(IBuffer *buffer, IBufferProvider *provider);
-        virtual double Latency();
-        virtual void Drain();
-
-        IDeviceList* GetDeviceList();
+        virtual void Pause() override;
+        virtual void Resume() override;
+        virtual void SetVolume(double volume) override;
+        virtual double GetVolume() override;
+        virtual void Stop() override;
+        virtual int Play(IBuffer *buffer, IBufferProvider *provider) override;
+        virtual double Latency() override;
+        virtual void Drain() override;
+        virtual IDeviceList* GetDeviceList() override;
+        virtual bool SetDefaultDevice(const char* deviceId) override;
+        virtual IDevice* GetDefaultDevice() override;
 
     private:
         enum State {
