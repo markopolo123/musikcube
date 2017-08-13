@@ -57,7 +57,7 @@ static std::set<std::string> invalidCrossfadeOutputs = { "WaveOut" };
 template <typename T>
 struct DestroyDeleter {
     void operator()(T* t) {
-        t->Destroy();
+        if (t) t->Destroy();
     }
 };
 

@@ -38,8 +38,6 @@
 
 namespace musik { namespace core { namespace sdk {
 
-    class IOutput;
-
     class IDevice {
         public:
             virtual void Destroy() = 0;
@@ -54,8 +52,8 @@ namespace musik { namespace core { namespace sdk {
             virtual const IDevice* At(size_t index) const = 0;
     };
 
-    template <typename Device>
-    IDevice* findDeviceById(IOutput* output, const std::string& deviceId) {
+    template <typename Device, typename Output>
+    IDevice* findDeviceById(Output* output, const std::string& deviceId) {
         IDevice* result = nullptr;
         auto deviceList = output->GetDeviceList();
         if (deviceList) {

@@ -84,11 +84,15 @@ class AlsaDevice : public IDevice {
             this->name = name;
         }
 
-        virtual const char* Name() {
+        virtual void Destroy() override {
+            delete this;
+        }
+
+        virtual const char* Name() const override {
             return name.c_str();
         }
 
-        virtual const char* Id() {
+        virtual const char* Id() const override {
             return id.c_str();
         }
 
@@ -98,15 +102,15 @@ class AlsaDevice : public IDevice {
 
 class AlsaDeviceList : public musik::core::sdk::IDeviceList {
     public:
-        virtual void Destroy() {
+        virtual void Destroy() override {
             delete this;
         }
 
-        virtual size_t Count() {
+        virtual size_t Count() const override {
             return devices.size();
         }
 
-        virtual IDevice* At(size_t index) {
+        virtual const IDevice* At(size_t index) const override {
             return &devices.at(index);
         }
 
@@ -122,6 +126,15 @@ extern "C" void SetPreferences(musik::core::sdk::IPreferences* prefs) {
     ::prefs = prefs;
     prefs->GetString(PREF_DEVICE_ID, nullptr, 0, "");
     prefs->Save();
+}
+
+static std::string getDeviceId() {
+    char buffer[4096] = { 0 };
+    std::string storedDeviceId;
+    if (prefs && prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
+        storedDeviceId.assign(buffer);
+    }
+    return storedDeviceId;
 }
 
 AlsaOut::AlsaOut()
@@ -165,6 +178,26 @@ void AlsaOut::CloseDevice() {
     }
 }
 
+musik::core::sdk::IDevice* AlsaOut::GetDefaultDevice() {
+    return findDeviceById<AlsaDevice, IOutput>(this, getDeviceId());
+}
+
+bool AlsaOut::SetDefaultDevice(const char* deviceId) {
+    if (!prefs || !deviceId || !strlen(deviceId)) {
+        prefs->SetString(PREF_DEVICE_ID, "");
+        return true;
+    }
+
+    auto device = findDeviceById<AlsaDevice, IOutput>(this, deviceId);
+    if (device) {
+        device->Destroy();
+        prefs->SetString(PREF_DEVICE_ID, deviceId);
+        return true;
+    }
+
+    return false;
+}
+
 IDeviceList* AlsaOut::GetDeviceList() {
     AlsaDeviceList* result = new AlsaDeviceList();
 
@@ -175,7 +208,10 @@ IDeviceList* AlsaOut::GetDeviceList() {
         while (*n != nullptr) {
             char *name = snd_device_name_get_hint(*n, "NAME");
             if (name) {
-                result->Add(std::string(name), std::string(name));
+                std::string stdName = name;
+                if (stdName != "default") {
+                    result->Add(stdName, stdName);
+                }
                 free(name);
             }
             ++n;
@@ -192,12 +228,7 @@ std::string AlsaOut::GetPreferredDeviceId() {
     std::string result;
 
     if (prefs) {
-        char buffer[4096] = { 0 };
-        std::string storedDeviceId;
-
-        if (prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
-            storedDeviceId.assign(buffer);
-        }
+        std::string storedDeviceId = getDeviceId();
 
         auto deviceList = GetDeviceList();
         if (deviceList) {

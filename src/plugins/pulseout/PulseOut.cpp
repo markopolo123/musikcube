@@ -43,6 +43,8 @@
 using namespace musik::core::sdk;
 
 typedef std::unique_lock<std::recursive_mutex> Lock;
+typedef musik::core::sdk::IOutput IOutput;
+
 static musik::core::sdk::IPreferences* prefs = nullptr;
 
 #define PREF_FORCE_LINEAR_VOLUME "force_linear_volume"
@@ -55,11 +57,15 @@ class PulseDevice : public musik::core::sdk::IDevice {
             this->name = name;
         }
 
-        virtual const char* Name() {
+        virtual void Destroy() {
+            delete this;
+        }
+
+        virtual const char* Name() const {
             return name.c_str();
         }
 
-        virtual const char* Id() {
+        virtual const char* Id() const {
             return id.c_str();
         }
 
@@ -73,11 +79,11 @@ class PulseDeviceList : public musik::core::sdk::IDeviceList {
             delete this;
         }
 
-        virtual size_t Count() {
+        virtual size_t Count() const {
             return devices.size();
         }
 
-        virtual IDevice* At(size_t index) {
+        virtual const IDevice* At(size_t index) const {
             return &devices.at(index);
         }
 
@@ -103,6 +109,15 @@ static void deviceEnumerator(pa_context* context, const pa_sink_info* info, int 
     if (eol) {
         pa_threaded_mainloop_signal(deviceListContext->mainLoop, 0);
     }
+}
+
+static std::string getDeviceId() {
+    char buffer[4096] = { 0 };
+    std::string storedDeviceId;
+    if (prefs && prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
+        storedDeviceId.assign(buffer);
+    }
+    return storedDeviceId;
 }
 
 extern "C" void SetPreferences(musik::core::sdk::IPreferences* prefs) {
@@ -150,6 +165,26 @@ void PulseOut::Drain() {
         pa_blocking_drain(this->audioConnection, 0);
         std::cerr << "drained...\n";
     }
+}
+
+musik::core::sdk::IDevice* PulseOut::GetDefaultDevice() {
+    return findDeviceById<PulseDevice, IOutput>(this, getDeviceId());
+}
+
+bool PulseOut::SetDefaultDevice(const char* deviceId) {
+    if (!prefs || !deviceId || !strlen(deviceId)) {
+        prefs->SetString(PREF_DEVICE_ID, "");
+        return true;
+    }
+
+    auto device = findDeviceById<PulseDevice, IOutput>(this, deviceId);
+    if (device) {
+        device->Destroy();
+        prefs->SetString(PREF_DEVICE_ID, deviceId);
+        return true;
+    }
+
+    return false;
 }
 
 musik::core::sdk::IDeviceList* PulseOut::GetDeviceList() {
@@ -210,29 +245,13 @@ musik::core::sdk::IDeviceList* PulseOut::GetDeviceList() {
 }
 
 std::string PulseOut::GetPreferredDeviceId() {
-    std::string result;
-
-    if (prefs) {
-        char buffer[4096] = { 0 };
-        std::string storedDeviceId;
-
-        if (prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
-            storedDeviceId.assign(buffer);
-        }
-
-        auto deviceList = GetDeviceList();
-        if (deviceList) {
-            for (size_t i = 0; i < deviceList->Count(); i++) {
-                if (deviceList->At(i)->Id() == storedDeviceId) {
-                    result = storedDeviceId;
-                    break;
-                }
-            }
-            deviceList->Destroy();
-        }
+    std::string deviceId = getDeviceId();
+    auto device = findDeviceById<PulseDevice>(this, deviceId);
+    if (device) {
+        device->Destroy();
+        return deviceId;
     }
-
-    return result;
+    return "";
 }
 
 void PulseOut::OpenDevice(musik::core::sdk::IBuffer* buffer) {

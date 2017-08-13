@@ -447,7 +447,7 @@ bool DirectSoundOut::SetDefaultDevice(const char* deviceId) {
         return true;
     }
 
-    auto device = findDeviceById<DxDevice>(this, deviceId);
+    auto device = findDeviceById<DxDevice, IOutput>(this, deviceId);
     if (device) {
         device->Destroy();
         prefs->SetString(DEVICE_ID, deviceId);
@@ -458,7 +458,7 @@ bool DirectSoundOut::SetDefaultDevice(const char* deviceId) {
 }
 
 IDevice* DirectSoundOut::GetDefaultDevice() {
-    return findDeviceById<DxDevice>(this, getDeviceId());
+    return findDeviceById<DxDevice, IOutput>(this, getDeviceId());
 }
 
 LPCGUID DirectSoundOut::GetPreferredDeviceId() {

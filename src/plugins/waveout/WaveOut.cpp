@@ -341,7 +341,7 @@ bool WaveOut::SetDefaultDevice(const char* deviceId) {
         return true;
     }
 
-    auto device = findDeviceById<WaveOutDevice>(this, deviceId);
+    auto device = findDeviceById<WaveOutDevice, IOutput>(this, deviceId);
     if (device) {
         device->Destroy();
         prefs->SetString(PREF_DEVICE_ID, deviceId);
@@ -352,7 +352,7 @@ bool WaveOut::SetDefaultDevice(const char* deviceId) {
 }
 
 IDevice* WaveOut::GetDefaultDevice() {
-    return findDeviceById<WaveOutDevice>(this, getDeviceId());
+    return findDeviceById<WaveOutDevice, IOutput>(this, getDeviceId());
 }
 
 IDeviceList* WaveOut::GetDeviceList() {

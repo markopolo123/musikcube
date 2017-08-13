@@ -419,7 +419,7 @@ bool WasapiOut::SetDefaultDevice(const char* deviceId) {
         return true;
     }
 
-    auto device = findDeviceById<WasapiDevice>(this, deviceId);
+    auto device = findDeviceById<WasapiDevice, IOutput>(this, deviceId);
     if (device) {
         device->Destroy();
         prefs->SetString(PREF_DEVICE_ID, deviceId);
@@ -430,7 +430,7 @@ bool WasapiOut::SetDefaultDevice(const char* deviceId) {
 }
 
 IDevice* WasapiOut::GetDefaultDevice() {
-    return findDeviceById<WasapiDevice>(this, getDeviceId());
+    return findDeviceById<WasapiDevice, IOutput>(this, getDeviceId());
 }
 
 IDeviceList* WasapiOut::GetDeviceList() {
