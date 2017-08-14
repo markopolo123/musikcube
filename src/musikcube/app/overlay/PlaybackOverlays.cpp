@@ -161,13 +161,14 @@ void PlaybackOverlays::ShowOutputDeviceOverlay(std::function<void()> callback) {
         return;
     }
 
+    std::string currentDeviceName = _TSTR("settings_output_device_default");
+
     std::shared_ptr<IDeviceList> deviceList = std::shared_ptr<IDeviceList>(
         output->GetDeviceList(), DestroyDeleter<IDeviceList>());
 
     std::shared_ptr<IDevice> device = std::shared_ptr<IDevice>(
         output->GetDefaultDevice(), DestroyDeleter<IDevice>());
 
-    std::string currentDeviceName = _TSTR("settings_output_device_default");
     if (device) {
         currentDeviceName = device->Name();
     }
@@ -180,14 +181,17 @@ void PlaybackOverlays::ShowOutputDeviceOverlay(std::function<void()> callback) {
 
     std::shared_ptr<Adapter> adapter(new Adapter());
     adapter->AddEntry(_TSTR("settings_output_device_default"));
-    for (size_t i = 0; i < deviceList->Count(); i++) {
-        const std::string name = deviceList->At(i)->Name();
-        adapter->AddEntry(name);
 
-        width = std::max(width, u8cols(name));
+    if (deviceList) {
+        for (size_t i = 0; i < deviceList->Count(); i++) {
+            const std::string name = deviceList->At(i)->Name();
+            adapter->AddEntry(name);
 
-        if (name == currentDeviceName) {
-            selectedIndex = i + 1;
+            width = std::max(width, u8cols(name));
+
+            if (name == currentDeviceName) {
+                selectedIndex = i + 1;
+            }
         }
     }
 
