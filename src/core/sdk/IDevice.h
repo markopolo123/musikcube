@@ -35,6 +35,7 @@
 #pragma once
 
 #include <string>
+#include <string.h>
 
 namespace musik { namespace core { namespace sdk {
 
