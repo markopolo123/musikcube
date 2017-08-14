@@ -129,12 +129,7 @@ extern "C" void SetPreferences(musik::core::sdk::IPreferences* prefs) {
 }
 
 static std::string getDeviceId() {
-    char buffer[4096] = { 0 };
-    std::string storedDeviceId;
-    if (prefs && prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
-        storedDeviceId.assign(buffer);
-    }
-    return storedDeviceId;
+    return getPreferenceString<std::string>(prefs, PREF_DEVICE_ID, "");
 }
 
 AlsaOut::AlsaOut()
@@ -183,19 +178,7 @@ musik::core::sdk::IDevice* AlsaOut::GetDefaultDevice() {
 }
 
 bool AlsaOut::SetDefaultDevice(const char* deviceId) {
-    if (!prefs || !deviceId || !strlen(deviceId)) {
-        prefs->SetString(PREF_DEVICE_ID, "");
-        return true;
-    }
-
-    auto device = findDeviceById<AlsaDevice, IOutput>(this, deviceId);
-    if (device) {
-        device->Destroy();
-        prefs->SetString(PREF_DEVICE_ID, deviceId);
-        return true;
-    }
-
-    return false;
+    return setDefaultDevice<IPreferences, AlsaDevice, IOutput>(prefs, this, PREF_DEVICE_ID, deviceId);
 }
 
 IDeviceList* AlsaOut::GetDeviceList() {

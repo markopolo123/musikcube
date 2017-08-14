@@ -58,8 +58,8 @@ namespace musik { namespace core { namespace sdk {
             if (count) {
                 char* buffer = new char[count];
                 prefs->GetString(key, buffer, count, defaultValue);
-                std::string result = buffer;
-                delete buffer;
+                String result = buffer;
+                delete[] buffer;
                 return result;
             }
         }
