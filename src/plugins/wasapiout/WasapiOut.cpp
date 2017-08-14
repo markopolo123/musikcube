@@ -69,12 +69,7 @@ static inline std::string utf16to8(const wchar_t* utf16) {
 }
 
 static std::string getDeviceId() {
-    char buffer[4096] = { 0 };
-    std::string storedDeviceId;
-    if (prefs && prefs->GetString(PREF_DEVICE_ID, buffer, 4096, "") > 0) {
-        storedDeviceId.assign(buffer);
-    }
-    return storedDeviceId;
+    return getPreferenceString<std::string>(prefs, PREF_DEVICE_ID, "");;
 }
 
 class WasapiDevice : public musik::core::sdk::IDevice {
@@ -414,19 +409,7 @@ double WasapiOut::Latency() {
 }
 
 bool WasapiOut::SetDefaultDevice(const char* deviceId) {
-    if (!prefs || !deviceId || !strlen(deviceId)) {
-        prefs->SetString(PREF_DEVICE_ID, "");
-        return true;
-    }
-
-    auto device = findDeviceById<WasapiDevice, IOutput>(this, deviceId);
-    if (device) {
-        device->Destroy();
-        prefs->SetString(PREF_DEVICE_ID, deviceId);
-        return true;
-    }
-
-    return false;
+    return setDefaultDevice<IPreferences, WasapiDevice, IOutput>(prefs, this, PREF_DEVICE_ID, deviceId);
 }
 
 IDevice* WasapiOut::GetDefaultDevice() {

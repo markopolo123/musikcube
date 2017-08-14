@@ -60,12 +60,7 @@ extern "C" __declspec(dllexport) void SetPreferences(musik::core::sdk::IPreferen
 }
 
 static std::string getDeviceId() {
-    char buffer[2048] = { 0 };
-    std::string storedDeviceId;
-    if (prefs && prefs->GetString(DEVICE_ID, buffer, 4096, "") > 0) {
-        storedDeviceId.assign(buffer);
-    }
-    return storedDeviceId;
+    return getPreferenceString<std::string>(prefs, DEVICE_ID, "");
 }
 
 class DxDevice : public musik::core::sdk::IDevice {
@@ -75,17 +70,9 @@ class DxDevice : public musik::core::sdk::IDevice {
             this->name = name;
         }
 
-        virtual void Destroy() override {
-            delete this;
-        }
-
-        virtual const char* Name() const override {
-            return name.c_str();
-        }
-
-        virtual const char* Id() const override {
-            return id.c_str();
-        }
+        virtual void Destroy() override { delete this; }
+        virtual const char* Name() const override { return name.c_str(); }
+        virtual const char* Id() const override { return id.c_str(); }
 
     private:
         std::string name, id;
@@ -93,17 +80,9 @@ class DxDevice : public musik::core::sdk::IDevice {
 
 class DxDeviceList : public musik::core::sdk::IDeviceList {
     public:
-        virtual void Destroy() {
-            delete this;
-        }
-
-        virtual size_t Count() const override {
-            return devices.size();
-        }
-
-        virtual const IDevice* At(size_t index) const override {
-            return &devices.at(index);
-        }
+        virtual void Destroy() { delete this; }
+        virtual size_t Count() const override { return devices.size(); }
+        virtual const IDevice* At(size_t index) const override { return &devices.at(index); }
 
         void Add(const std::string& id, const std::string& name) {
             devices.push_back(DxDevice(id, name));
@@ -288,7 +267,6 @@ static BOOL CALLBACK DSEnumCallback(LPGUID lpGuid, LPCWSTR description, LPCWSTR 
         list->Add(utf8Id, utf8Desc);
     }
 
-
     return 1;
 }
 
@@ -344,8 +322,8 @@ int DirectSoundOut::Play(IBuffer *buffer, IBufferProvider *provider) {
             writeOffset,
             bufferBytes,
             (void **)&dst1, &size1,
-(void **)&dst2, &size2,
-0);
+            (void **)&dst2, &size2,
+            0);
     }
 
     if (result == DS_OK) {
@@ -442,19 +420,7 @@ IDeviceList* DirectSoundOut::GetDeviceList() {
 }
 
 bool DirectSoundOut::SetDefaultDevice(const char* deviceId) {
-    if (!prefs || !deviceId || !strlen(deviceId)) {
-        prefs->SetString(DEVICE_ID, "");
-        return true;
-    }
-
-    auto device = findDeviceById<DxDevice, IOutput>(this, deviceId);
-    if (device) {
-        device->Destroy();
-        prefs->SetString(DEVICE_ID, deviceId);
-        return true;
-    }
-
-    return false;
+    return setDefaultDevice<IPreferences, DxDevice, IOutput>(prefs, this, DEVICE_ID, deviceId);
 }
 
 IDevice* DirectSoundOut::GetDefaultDevice() {

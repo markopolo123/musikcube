@@ -68,4 +68,21 @@ namespace musik { namespace core { namespace sdk {
         return result;
     }
 
+    template <typename Prefs, typename Device, typename Output>
+    bool setDefaultDevice(Prefs* prefs, Output* output, const char* key, const char* deviceId) {
+        if (!prefs || !deviceId || !strlen(deviceId)) {
+            prefs->SetString(key, "");
+            return true;
+        }
+
+        auto device = findDeviceById<Device, Output>(output, deviceId);
+        if (device) {
+            device->Destroy();
+            prefs->SetString(key, deviceId);
+            return true;
+        }
+
+        return false;
+    }
+
 } } }

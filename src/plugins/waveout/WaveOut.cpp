@@ -336,19 +336,7 @@ int WaveOut::Play(IBuffer *buffer, IBufferProvider *provider) {
 }
 
 bool WaveOut::SetDefaultDevice(const char* deviceId) {
-    if (!prefs || !deviceId || !strlen(deviceId)) {
-        prefs->SetString(PREF_DEVICE_ID, "");
-        return true;
-    }
-
-    auto device = findDeviceById<WaveOutDevice, IOutput>(this, deviceId);
-    if (device) {
-        device->Destroy();
-        prefs->SetString(PREF_DEVICE_ID, deviceId);
-        return true;
-    }
-
-    return false;
+    return setDefaultDevice<IPreferences, WaveOutDevice, IOutput>(prefs, this, PREF_DEVICE_ID, deviceId);
 }
 
 IDevice* WaveOut::GetDefaultDevice() {
